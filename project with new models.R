@@ -3,10 +3,13 @@ library(forecast)
 library(astsa)
 library(zoo)
 library(stats)
+library(tseries)
+library(aTSA)
 par(mfrow=c(1,1))
 projectData<-read.csv("C:/Users/lenovo1/Desktop/projectdata.csv")
 torontoData<-data.frame(Toronto=projectData[,8])
 torontoData.ts<-ts(torontoData)
+new_toronto<-torontoData.ts[c(111073:121992)] #Reducing Data
 
 find.freq <- function(x)
 {
@@ -31,11 +34,35 @@ find.freq <- function(x)
     period <- 1
   return(period)
 }
-find.freq(torontoData.ts)
-torontoData.ts<-ts(torontoData,start=c(1,1),end=c(5359,24),frequency=24)
-torontoData.ts<-window(torontoData.ts,start=c(246,1))
-plot(decompose(torontoData.ts))
+
+
+find.freq(new_toronto)
+torontoData.ts<-ts(new_toronto,frequency=24)
 plot(torontoData.ts,main="Original Data")
+adf.test(new_toronto)
+acf(new_toronto)
+plot(decompose(torontoData.ts))
+
+
+#Identify Outlier
+boxplot.stats(torontoData.ts)
+boxplot(torontoData.ts)
+
+#Subtracting seasonal component
+decomp<-stl(torontoData.ts,s.window = "periodic")
+deseaonal_data<-seasadj(decomp)
+plot(decomp)
+
+
+training<-torontoData.ts[c(1:8784)]
+testing<-torontoData.ts[c(8784:10920)]
+
+#Clean data
+clean_train<-boxplot(tsclean(training))
+clean_test<-boxplot(tsclean(test))
+
+
+
 plot(ma(torontoData.ts,order=24),col="red",lwd=1,main="1 Day Moving Average")
 plot(ma(torontoData.ts,order=168),col="blue",lwd=1,main="1 Week Moving Average")
 plot(ma(torontoData.ts,order=8766),col="orange",lwd=1,main="1 Year Moving Average")
@@ -43,16 +70,18 @@ acf2(torontoData.ts)
 acf2(diff(torontoData.ts))
 acf2(diff(diff(torontoData.ts),24))
 acf2(diff(diff(diff(torontoData.ts),24),168))
-torontoData.ts<-ts(torontoData,start=c(1,1),end=c(5359,24),frequency=24)
-training<-window(torontoData.ts,start=c(246,1),end=c(4628,24))
-testing<-window(torontoData.ts,start=c(4629,1))
+#torontoData.ts<-ts(torontoData,start=c(1,1),end=c(5359,24),frequency=24)
+
+
 
 
 #ARIMA MODEL
 trainingARIMA<-auto.arima(training)
+tsdisplay(residuals(trainingARIMA), main = "(2,1,5) Model residuals")
 summary(trainingARIMA)
 predictARIMA<-forecast(trainingARIMA,h=17544)
 accuracy(predictARIMA$mean,testing)
+
 
 #ETS MODEL
 trainingETS<-ets(training)
@@ -66,27 +95,22 @@ summary(trainingTslm)
 predictTslm<-forecast(trainingTslm,h=17544)
 accuracy(predictTslm$mean,testing)
 
+#Holt
+training_Holt<-holt(training, type=c("additive", "multiplicative"), plot=TRUE)
+summary(training_Holt)
+predictHolt<-forecast(training_Holt,h=100)
+plot(forecast(training_Holt, h=100), main="Holt forecast")
+
+#HW
+
+
 #NN MODEL
-trainingNN<-nnetar(training)
-nn.forecast<-forecast(trainingNN, h=17544)
-plot(nn.forecast)
-accuracy(nn.forecast$mean,testing)
+NN<-nnetar(training)
+accuracy(NN)
+plot(forecast(NN, h=100), main="NN forecast for Toronto Demand")
+##NN has the least rmse values, good model and forecast.
 
-#MLP MODEL
-require(RSNNS)
-trainingMLP<-mlp(training,testing)
-plot(trainingMLP)
-print(trainingMLP)
-mlp.fore<-forecast(trainingMLP,h=17544)
-accuracy(mlp.fore$mean,testing)
-
-#KNN MODEL 
-cl <- factor(training)
-train.knn<-knn(training,testing,cl)
-predictKNN<-forecast(train.knn,h=17544)
-accuracy(predictKNN$mean,testing)
-
-#SVR and prediction 
-require(e1071)
-#Problem of X and Y variable
+#Accuracy display of models
+results<-resamples(list(trainingARIMA, trainingETS, NN))
+summary(results)
 
